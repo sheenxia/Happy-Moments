@@ -1,0 +1,288 @@
+---
+title: "The Happy Moments of Males"
+output: html_notebook
+---
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#Load library
+library(tm)
+library(tidyverse)
+library(tidytext)
+library(wordcloud)
+library(RColorBrewer)
+```
+
+```{r ,message=FALSE, warning=FALSE,echo=FALSE}
+#Read files and combine files
+df<- read_csv("../output/processed_moments.csv")
+demo_data <- read_csv("../data/demographic.csv")
+
+df <- df %>%
+  inner_join(demo_data, by = "wid")  %>%
+  select(c("text","country","gender","marital","cleaned_hm","parenthood"))
+
+#filter out the male data
+df_male <-df %>%
+  filter(gender %in% c('m') )
+
+
+#create stopwords
+data("stop_words")
+word <- c("happy","ago","yesterday","lot","today","months","month",
+                 "happier","happiest","last","week","past","finally","found","favorite","received","happiness","excited","surprise","beautiful","fun","delicious","celebrated","pay","expected","prepared","share"
+
+)
+
+my_stop_words <- stop_words %>%
+  bind_rows(mutate(tibble(word), lexicon = "updated"))
+
+
+```
+
+\
+\
+
+
+###What are those sentiments from males?
+
+```{r   , message=FALSE,  warning=FALSE,echo=FALSE}
+# male's sentiment 
+df_male %>%
+  unnest_tokens(word,text)%>%
+  anti_join(my_stop_words) %>%
+  inner_join(get_sentiments("nrc"))%>%
+  group_by(sentiment)%>% count(word)%>% summarize(Score = sum(n))%>%arrange(desc(Score))%>%
+  ggplot(aes(x=reorder(sentiment,-Score), y = Score))+
+  geom_bar(aes(fill=sentiment),stat = "identity")+
+  xlab("sentiment") + ylab("Score") + ggtitle("sentiment of males")
+
+
+```
+
+Looking at the sentiment from male's happy moments, we can find that positive, joy,trust,and anticipation contribute most of the sentiments. For the rest of the sentiments such as negative, sadness , fear , anger ,and disgust, they don't play a big part in male's happy moments.So what are those words contributing to the joy sentiment?
+
+
+
+###The most common joy words from males.
+```{r,message=FALSE, warning=FALSE, echo=FALSE}
+
+# explore male's joy sentiment
+  df_male %>%
+  unnest_tokens(word,text)%>%
+  anti_join(my_stop_words) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(sentiment %in% c("joy"))%>%
+  count(word, sentiment, sort = TRUE) %>%
+  top_n(10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ####plot most common joy words of males
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE,fill = "orange") +
+  labs(y = "Contribution to sentiment",
+       x = NULL)+coord_flip()
+
+```
+
+From the plot, We can see that friend is the most frequent word. Birthday is the second. Also, Males really enjoy talking about thier family especially their daughter and mother. Of course, males are happy with money,food,shopping and vacation.
+\
+\
+
+ 
+##Single vs Married
+\
+
+
+
+###Wordcloud 
+
+```{r, message=FALSE, warning=FALSE,fig.height=6, fig.width=6,echo=FALSE}
+#split males into single and married
+male_single <- df_male%>%filter(marital =="single")
+male_married<- df_male%>%filter(marital =="married")
+
+#wordcloud
+corpus<-Corpus(VectorSource(male_single$text))
+corpus <- tm_map(corpus, stripWhitespace)
+tdm.all<-TermDocumentMatrix(corpus)
+tdm.tidy=tidy(tdm.all)
+tdm.overall=summarise(group_by(tdm.tidy, term), sum(count))
+
+corpus1<-Corpus(VectorSource(male_married$text))
+corpus1 <- tm_map(corpus1, stripWhitespace)
+tdm.all1<-TermDocumentMatrix(corpus1)
+tdm.tidy1=tidy(tdm.all1)
+tdm.overall1=summarise(group_by(tdm.tidy1, term), sum(count))
+
+
+par(mfrow=c(2,1), las=1, mar=c(3.1, 4.1, 1.1, 2.1))
+###male married word cloud
+
+wordcloud(tdm.overall1$term, tdm.overall1$`sum(count)`,
+          scale=c(3,0.5),
+          max.words=20,
+          min.freq=1,
+          random.order=FALSE,
+          rot.per=0.3,
+          use.r.layout=T,
+          random.color=FALSE,
+          colors=brewer.pal(7,"Greens"))
+
+###male single word cloud
+wordcloud(tdm.overall$term, tdm.overall$`sum(count)`,
+          scale=c(3,0.5),
+          max.words=20,
+          min.freq=1,
+          random.order=FALSE,
+          rot.per=0.3,
+          use.r.layout=T,
+          random.color=FALSE,
+          colors=brewer.pal(9,"Blues"))
+
+
+```
+
+Comparing with the two word clouds,the top one is from married males and it's clear that married males talk about thier wife most of time and they focus more on thier family members such as son and daughter. The bottom is from single males and we find that they care more about their friends most of time. Besides, single males talk more about girlfriend.
+
+\
+\
+
+
+### Big difference in joy sentiment?
+
+```{r ,  message=FALSE, warning=FALSE,echo=FALSE}
+word <- c("happy","ago","yesterday","lot","today","months","month",
+                 "happier","happiest","last","week","past","finally","found","favorite","received","happiness","excited","surprise","beautiful","fun","delicious","celebrated","pay","expected","prepared","share","friend","money","unexpected","love","food","green","birthday","score","mother","shopping","smile","gift","pretty","vacation","laugh","special","joy","perfect","wonderful","pleasant","bonus","graduation"
+)
+
+sm_stop_words <- stop_words %>%
+  bind_rows(mutate(tibble(word), lexicon = "updated"))
+
+
+
+require(gridExtra) # For combining two plots
+####married male joy
+plot1<- male_married%>%
+  unnest_tokens(word,text)%>%
+  anti_join(sm_stop_words) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(sentiment %in% c("joy"))%>%
+  count(word, sentiment, sort = TRUE) %>%
+  top_n(5) %>%
+  mutate(word = reorder(word, n)) %>%
+  ####plot most common joy words of married males
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE,fill = "lightblue") +
+  labs(y = "Contribution to sentiment",
+       x = NULL, title="Married")+ 
+  coord_flip()
+
+####single male joy
+plot2 <- male_single%>%
+  unnest_tokens(word,text)%>%
+  anti_join(sm_stop_words) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(sentiment %in% c("joy"))%>%
+  count(word, sentiment, sort = TRUE) %>%
+  top_n(5) %>%
+  mutate(word = reorder(word, n)) %>%
+    ####plot most common joy words of single males
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE,fill = "lightgoldenrod1") +
+  labs(y = "Contribution to sentiment",
+       x = NULL, title="Single")+
+  coord_flip()
+
+grid.arrange(plot1, plot2, ncol=2)
+
+```
+
+In order to have a clear comparison, I removed the same common words such as "friend","money","love","food" and "birthday". Then we can find that married males have happy moments when they spend time with their family and they care more about thier children and marriage. On the other hand, the single males enjoy music, cream, and beer. 
+
+
+
+
+\
+\
+
+
+###Which country contributes most of words?
+```{r message=FALSE, warning=FALSE,echo=FALSE}
+# countries contributing most words
+ df_male%>%unnest_tokens(word,cleaned_hm)%>%group_by(country)%>%count(word)%>%summarise(total_words = sum(n))%>%arrange(desc(total_words))%>%top_n(5)%>%ungroup()%>%
+  ggplot(aes(x=reorder(country,total_words) , y = total_words))+
+  geom_bar(aes(fill=country),stat = "identity")+
+  xlab("country") + ylab("words") + ggtitle("words contributed from countries")
+
+```
+
+As shown above, most of male words are from America and India. So we can think that the sentiment mainly focus on American and Indian males.
+
+
+\
+\
+
+
+###The joy sentiment comparison between American and Indian males.
+
+```{r message=FALSE, warning=FALSE,echo=FALSE}
+#remove extra stopwords
+word <- c("happy","ago","yesterday","lot","today","months","month",
+                 "happier","happiest","last","week","past","finally","found","favorite","received","happiness","excited","surprise","beautiful","fun","delicious","celebrated","pay","expected","unexpected","prepared","share","friend","unexpected","love","green","birthday","score","mother","wonderful","smile","gift","pretty","outstanding","money","daughter")
+
+
+
+new_stop_words <- stop_words %>%
+  bind_rows(mutate(tibble(word), lexicon = "updated"))
+
+
+###USA anticipation sentient
+require(gridExtra) # For combining two plots
+
+###VEN anticipation sentient
+
+p1<-df_male%>%
+  filter( country == "VEN")%>%
+  unnest_tokens(word,text)%>%
+  anti_join(new_stop_words) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(sentiment %in% c("joy"))%>%
+  count(word, sentiment, sort = TRUE) %>%
+  top_n(5) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE,fill = "red") +
+  labs(y = "Contribution to sentiment",
+       x = NULL, title="Venezuela")+
+  coord_flip()
+
+###GBR anticipation sentient
+
+p2<-df_male%>%
+  filter( country == "GBR")%>%
+  unnest_tokens(word,text)%>%
+  anti_join(new_stop_words) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  filter(sentiment %in% c("joy"))%>%
+  count(word, sentiment, sort = TRUE) %>%
+  top_n(5) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE,fill = "royalblue") +
+  labs(y = "Contribution to sentiment",
+       x = NULL, title="United Kingdom")+
+  coord_flip()
+
+
+grid.arrange(p1, p2,ncol=2)
+
+```
+
+From the plot, it's interesting that males of Venezuela are happy about food especially they love chocolate and they also love dancing. While British males really love association football and they enjoy music as well.
+
+\
+\
+
+
+###Reference
+Silge,Robinson,2018-12-21,"Text Mining with R". https://www.tidytextmining.com/index.html
+
